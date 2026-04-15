@@ -1,0 +1,17 @@
+node_modules/
+.env
+out/
+public/bg.mp4
+public/voiceover.mp3
+public/voiceover.wav
+public/music.mp3
+public/sfx/*.mp3
+public/words.json
+cache/
+whisper.cpp/
+src/words.json
+src/banner.json
+src/meta.json
+src/sfx.json
+src/script.txt
+src/captions.whisper.bak.json
