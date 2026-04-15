@@ -10,6 +10,7 @@ if (args.length === 0) {
 
 const force = args.includes('--force');
 const skipRender = args.includes('--skip-render');
+const urlArg = args.find((a) => a.startsWith('--url='));
 const topic = args.filter((a) => !a.startsWith('--')).join(' ');
 
 function step(name, cmd, cmdArgs) {
@@ -35,7 +36,9 @@ async function main() {
   await step('prep', 'node', ['scripts/prep.mjs']);
 
   // 4. Download video drone (usa voiceoverDuration da meta.json)
-  await step('download', 'node', ['scripts/download.mjs', topic, ...passForce]);
+  const downloadArgs = ['scripts/download.mjs', topic, ...passForce];
+  if (urlArg) downloadArgs.push(urlArg);
+  await step('download', 'node', downloadArgs);
 
   // 5. Re-prep per aggiornare videoDuration in meta.json
   await step('prep (refresh)', 'node', ['scripts/prep.mjs']);

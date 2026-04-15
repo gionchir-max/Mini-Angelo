@@ -150,25 +150,35 @@ function pickBest(results, minDuration, skip = 0) {
   return scored[skip] ?? scored[0] ?? null;
 }
 
-async function downloadVideo(videoId) {
-  const outTmpl = path.join(CACHE, `${videoId}.%(ext)s`);
-  const existing = [`${videoId}.mp4`, `${videoId}.mkv`, `${videoId}.webm`]
+async function downloadVideo(videoId, neededSeconds) {
+  // Cache tagged per durata richiesta: scaricamenti parziali diversi per neededSeconds diversi
+  const tag = neededSeconds ? `_${Math.ceil(neededSeconds)}s` : '';
+  const outTmpl = path.join(CACHE, `${videoId}${tag}.%(ext)s`);
+  const existing = [`${videoId}${tag}.mp4`, `${videoId}${tag}.mkv`, `${videoId}${tag}.webm`]
     .map((f) => path.join(CACHE, f))
     .find((f) => existsSync(f));
   if (existing) {
     console.log(`[download] cache hit: ${existing}`);
     return existing;
   }
-  console.log(`[download] yt-dlp → ${videoId}`);
-  await run(YTDLP, [
+  const args = [
     `https://www.youtube.com/watch?v=${videoId}`,
     '-f', 'bestvideo[height>=1080][ext=mp4]+bestaudio/bestvideo[ext=mp4]/best',
     '--merge-output-format', 'mp4',
     '-o', outTmpl,
     '--no-warnings',
     '--quiet',
-  ]);
-  const files = [`${videoId}.mp4`, `${videoId}.mkv`, `${videoId}.webm`]
+  ];
+  if (neededSeconds && neededSeconds > 0) {
+    // Scarica solo 0..neededSeconds (yt-dlp richiede ffmpeg per il cut; lo forniamo esplicito)
+    args.push('--download-sections', `*0-${Math.ceil(neededSeconds)}`);
+    args.push('--ffmpeg-location', ffmpegPath);
+    console.log(`[download] yt-dlp → ${videoId} (solo primi ${Math.ceil(neededSeconds)}s)`);
+  } else {
+    console.log(`[download] yt-dlp → ${videoId} (full)`);
+  }
+  await run(YTDLP, args);
+  const files = [`${videoId}${tag}.mp4`, `${videoId}${tag}.mkv`, `${videoId}${tag}.webm`]
     .map((f) => path.join(CACHE, f))
     .filter((f) => existsSync(f));
   if (files.length === 0) throw new Error('Download fallito: nessun file generato');
@@ -255,23 +265,25 @@ async function main() {
   }
   console.log(`[download] scelto: "${best.title}" — ${best.channel} — ${best.height}p — ${best.duration}s`);
 
-  const srcFile = await downloadVideo(best.id);
+  // Serve: 3s trim iniziale + targetDuration. Aggiungo 5s di margine.
+  const neededSeconds = 3 + targetDuration + 5;
+  const srcFile = await downloadVideo(best.id, neededSeconds);
   const srcDuration = await probeDuration(srcFile);
 
   // Trim primi 5s, center-crop 9:16, scala a 1080x1920, no audio
   // Se il source è più corto del target, loopa con stream_loop
   if (existsSync(BG_MP4)) unlinkSync(BG_MP4);
 
-  const usableDuration = srcDuration - 5;
+  const usableDuration = srcDuration - 3;
   if (usableDuration < targetDuration) {
     throw new Error(
-      `Il video scaricato (${srcDuration.toFixed(1)}s) è più corto del target (${targetDuration}s) dopo il trim iniziale di 5s. Filtro ricerca mancato — interrompo.`,
+      `Il video scaricato (${srcDuration.toFixed(1)}s) è più corto del target (${targetDuration}s) dopo il trim iniziale di 3s. Filtro ricerca mancato — interrompo.`,
     );
   }
 
   const args = [
     '-y',
-    '-ss', '5',
+    '-ss', '3',
     '-i', srcFile,
     '-t', String(targetDuration),
     '-vf', 'crop=ih*9/16:ih,scale=1080:1920:flags=lanczos',
