@@ -211,8 +211,8 @@ async function main() {
     }
   }
 
-  // Durata minima = voiceover + 5s di margine. Il video deve coprire tutto SENZA loop.
-  const minDuration = Math.ceil(voiceoverDuration + 5);
+  // Durata minima = voiceover + 15s di margine (10s trim iniziale + 5s buffer). Il video deve coprire tutto SENZA loop.
+  const minDuration = Math.ceil(voiceoverDuration + 15);
 
   let best = null;
   if (URL_OVERRIDE) {
@@ -268,8 +268,8 @@ async function main() {
   }
   console.log(`[download] scelto: "${best.title}" — ${best.channel} — ${best.height}p — ${best.duration}s`);
 
-  // Serve: 3s trim iniziale + targetDuration. Aggiungo 5s di margine.
-  const neededSeconds = 3 + targetDuration + 5;
+  // Serve: 10s trim iniziale + targetDuration. Aggiungo 5s di margine.
+  const neededSeconds = 10 + targetDuration + 5;
   const srcFile = await downloadVideo(best.id, neededSeconds);
   const srcDuration = await probeDuration(srcFile);
 
@@ -277,16 +277,16 @@ async function main() {
   // Se il source è più corto del target, loopa con stream_loop
   if (existsSync(BG_MP4)) unlinkSync(BG_MP4);
 
-  const usableDuration = srcDuration - 3;
+  const usableDuration = srcDuration - 10;
   if (usableDuration < targetDuration) {
     throw new Error(
-      `Il video scaricato (${srcDuration.toFixed(1)}s) è più corto del target (${targetDuration}s) dopo il trim iniziale di 3s. Filtro ricerca mancato — interrompo.`,
+      `Il video scaricato (${srcDuration.toFixed(1)}s) è più corto del target (${targetDuration}s) dopo il trim iniziale di 10s. Filtro ricerca mancato — interrompo.`,
     );
   }
 
   const args = [
     '-y',
-    '-ss', '3',
+    '-ss', '10',
     '-i', srcFile,
     '-t', String(targetDuration),
     '-vf', 'crop=ih*9/16:ih,scale=1080:1920:flags=lanczos',
